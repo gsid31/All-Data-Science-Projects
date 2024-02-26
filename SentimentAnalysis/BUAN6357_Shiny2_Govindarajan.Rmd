@@ -1,0 +1,309 @@
+---
+title: "Assignemnt2"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(shiny)
+library(tm)
+library(SnowballC)  # stemming
+library(lsa)
+library(caret)
+library(readr)
+library(tokenizers)
+library(SentimentAnalysis)
+library(wordcloud)
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+billboard_lyrics <- read.csv("billboard_lyrics_1964-2015.csv", stringsAsFactors = FALSE)
+billboard_lyrics.df <- data.frame(billboard_lyrics)
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+ui <- fluidPage(
+  titlePanel("Question 1 : Hits"),
+  
+  column(12,       
+         wellPanel(
+           selectInput(label = "Select the rank for which bar chart is to be displayed", choices = unique(billboard_lyrics$Rank), 
+                       selected = 1, inputId = "selected_rank"),
+           mainPanel(plotOutput("rank_bar_chart"),width = "100%")
+         )       
+  ),
+  titlePanel("Question 2 : Song lyrics bar chart"),
+  column(6,       
+         wellPanel(
+           selectInput(label = "Select the year or default(all years)-Plot 1", choices = c("All Years",unique(billboard_lyrics$Year)), 
+                       selected = "All Years", inputId = "selected_lyrics_year"),
+           mainPanel(plotOutput("lyrics_bar_chart_freq"),width = "100%")
+         )       
+  ),
+    column(6,       
+         wellPanel(
+           selectInput(label = "Select the year or default(all years)- Plot 2", choices = c("All Years",unique(billboard_lyrics$Year)), 
+                       selected = "All Years", inputId = "selected_lyrics_year_plot2"),
+           mainPanel(plotOutput("lyrics_bar_chart_freq_plot2"),width = "100%")
+         )       
+  )
+  ,titlePanel("Question 3 : Song title bar chart"),
+  column(6,       
+         wellPanel(
+           selectInput(label = "Select the year or default(all years)-Plot 1", choices = c("All Years",unique(billboard_lyrics$Year)), 
+                       selected = "All Years", inputId = "selected_lyrics_year_title_song"),
+           mainPanel(plotOutput("song_title_bar_chart_freq"),width = "100%")
+         )       
+  ),
+  column(6,       
+         wellPanel(
+           selectInput(label = "Select the year or default(all years)-Plot 2", choices = c("All Years",unique(billboard_lyrics$Year)), 
+                       selected = "All Years", inputId = "selected_lyrics_year_title_song_plot2"),
+           mainPanel(plotOutput("song_title_bar_chart_freq_plot2"),width = "100%")
+         )       
+  ),
+  titlePanel("Question 4 : Word cloud for song lyrics - all years"),
+   column(12,       
+         wellPanel(
+           mainPanel(plotOutput("lyrics_bar_chart_freq_word_cloud"),width = "100%")
+         ) 
+    )
+)
+
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+server <- function(input, output) {
+  
+  #Question 1
+  reactive_data_rank_bar_chart <- reactive({
+    selected_rank = as.numeric(input$selected_rank)
+    dataCurrentRank <- c()
+    artist_rank <- billboard_lyrics.df[, c("Artist","Rank")]
+    dataCurrentRank <- subset(artist_rank, artist_rank$Rank == selected_rank)
+    dataCurrentRankTable <- table(dataCurrentRank$Artist)
+    dataCurrentRankTable <-  as.data.frame(dataCurrentRankTable)
+    colnames(dataCurrentRankTable) <- c("Artist", "Hits")
+    dataCurrentRankTable <- dataCurrentRankTable[dataCurrentRankTable$Hits>0,]
+    dataCurrentRankTable <- dataCurrentRankTable[order(-dataCurrentRankTable$Hits),]
+    rownames(dataCurrentRankTable) <- NULL
+    return(dataCurrentRankTable)
+  })
+  
+  output$rank_bar_chart <- renderPlot({
+    ggplot(reactive_data_rank_bar_chart(),
+    aes(x=Artist,y=Hits)) + 
+      geom_bar(stat = "identity",fill ="Red")+
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  })
+  
+  #Question 2
+  reactive_bar_chart_song_lyrics <- reactive({
+    selected_lyrics_year <- as.character(input$selected_lyrics_year)
+    data_selected_year_lyrics <- c()
+    if(selected_lyrics_year == "All Years"){
+      corp1 <- Corpus(VectorSource(billboard_lyrics.df$Lyrics))
+      corp1 <- tm_map(corp1, stripWhitespace) 
+      corp1 <- tm_map(corp1, removePunctuation) 
+      corp1 <- tm_map(corp1, removeWords, stopwords("english"))
+      corp1 <- tm_map(corp1, stemDocument) #Fly, flying, Flew into a single 
+      tdm1 <- TermDocumentMatrix(corp1) #rectangular thing
+      myTdm1 <- as.matrix(tdm1)
+      FreqMat1 <- data.frame(ST = rownames(myTdm1), 
+                            Freq = rowSums(myTdm1), 
+                            row.names = NULL)
+      top10Words_qn2 <- data.frame(head(FreqMat1[order(-FreqMat1$Freq),], 10))
+    }else{
+      data_selected_year_lyrics <- subset(billboard_lyrics.df,           billboard_lyrics.df$Year == selected_lyrics_year)
+      corp1 <- Corpus(VectorSource(data_selected_year_lyrics$Lyrics))
+      corp1 <- tm_map(corp1, stripWhitespace) 
+      corp1 <- tm_map(corp1, removePunctuation) 
+      corp1 <- tm_map(corp1, removeWords, stopwords("english"))
+      corp1 <- tm_map(corp1, stemDocument) #Fly, flying, Flew into a single 
+      tdm1 <- TermDocumentMatrix(corp1) #rectangular thing
+      myTdm1 <- as.matrix(tdm1)
+      FreqMat1 <- data.frame(ST = rownames(myTdm1), 
+                            Freq = rowSums(myTdm1), 
+                            row.names = NULL)
+      top10Words_qn2 <- data.frame(head(FreqMat1[order(-FreqMat1$Freq),], 10))
+      
+    }
+    return(top10Words_qn2)
+  })
+  
+  #Question 2 - plot 2
+  reactive_bar_chart_song_lyrics_plot2 <- reactive({
+    selected_lyrics_year_plot2 <- as.character(input$selected_lyrics_year_plot2)
+    data_selected_year_lyrics_plot2 <- c()
+    if(selected_lyrics_year_plot2 == "All Years"){
+      corp1_plot2 <- Corpus(VectorSource(billboard_lyrics.df$Lyrics))
+      corp1_plot2<- tm_map(corp1_plot2, stripWhitespace) 
+      corp1_plot2 <- tm_map(corp1_plot2, removePunctuation) 
+      corp1_plot2 <- tm_map(corp1_plot2, removeWords, stopwords("english"))
+      corp1_plot2 <- tm_map(corp1_plot2, stemDocument) #Fly, flying, Flew into a single 
+      tdm1_plot2 <- TermDocumentMatrix(corp1_plot2) #rectangular thing
+      myTdm1_plot2 <- as.matrix(tdm1_plot2)
+      FreqMat1_plot2 <- data.frame(ST = rownames(myTdm1_plot2), 
+                            Freq = rowSums(myTdm1_plot2), 
+                            row.names = NULL)
+      top10Words_qn2_plot2 <- data.frame(head(FreqMat1_plot2[order(-FreqMat1_plot2$Freq),], 10))
+    }else{
+      data_selected_year_lyrics_plot2 <- subset(billboard_lyrics.df,           billboard_lyrics.df$Year == selected_lyrics_year_plot2)
+      corp1_plot2 <- Corpus(VectorSource(data_selected_year_lyrics_plot2$Lyrics))
+      corp1_plot2 <- tm_map(corp1_plot2, stripWhitespace) 
+      corp1_plot2 <- tm_map(corp1_plot2, removePunctuation) 
+      corp1_plot2 <- tm_map(corp1_plot2, removeWords, stopwords("english"))
+      corp1_plot2 <- tm_map(corp1_plot2, stemDocument) #Fly, flying, Flew into a single 
+      tdm1_plot2 <- TermDocumentMatrix(corp1_plot2) #rectangular thing
+      myTdm1_plot2 <- as.matrix(tdm1_plot2)
+      FreqMat1_plot2 <- data.frame(ST = rownames(myTdm1_plot2), 
+                            Freq = rowSums(myTdm1_plot2), 
+                            row.names = NULL)
+      top10Words_qn2_plot2 <- data.frame(head(FreqMat1_plot2[order(-FreqMat1_plot2$Freq),], 10))
+      
+    }
+    return(top10Words_qn2_plot2)
+  })
+  
+  output$lyrics_bar_chart_freq <- renderPlot({
+    # barplot(c(reactive_bar_chart_song_lyrics()$Freq),names.arg = c(as.character(reactive_bar_chart_song_lyrics()$ST)), las=3, col = cm.colors(6), ylim = c(0,20000), xlab = "Lyric words", ylab="Count of words")
+    
+        ggplot(reactive_bar_chart_song_lyrics(),
+    aes(x=ST,y=Freq)) + 
+      geom_bar(stat = "identity",fill ="Red",ylim = c(0,20000))+
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+      xlab("Lyric words") + ylab("Count of words")
+        
+        
+  })
+  
+    output$lyrics_bar_chart_freq_plot2 <- renderPlot({
+       ggplot(reactive_bar_chart_song_lyrics_plot2(),
+    aes(x=ST,y=Freq)) + 
+      geom_bar(stat = "identity",fill ="Red",ylim = c(0,20000))+
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+         xlab("Lyric words") + ylab("Count of words")
+  })
+  
+  #Question 3
+  reactive_bar_chart_song_title <- reactive({
+    selected_lyrics_year_title_song <- as.character(input$selected_lyrics_year_title_song)
+    data_selected_year_title <- c()
+    if(selected_lyrics_year_title_song == "All Years"){
+      corp2 <- Corpus(VectorSource(billboard_lyrics.df$Song))
+      corp2 <- tm_map(corp2, stripWhitespace) 
+      corp2 <- tm_map(corp2, removePunctuation) 
+      corp2 <- tm_map(corp2, removeWords, stopwords("english"))
+      corp2 <- tm_map(corp2, stemDocument) #Fly, flying, Flew into a single 
+      tdm2 <- TermDocumentMatrix(corp2) #rectangular thing
+      myTdm2 <- as.matrix(tdm2)
+      FreqMat2 <- data.frame(ST = rownames(myTdm2), 
+                            Freq = rowSums(myTdm2), 
+                            row.names = NULL)
+      top10Words_qn3 <- data.frame(head(FreqMat2[order(-FreqMat2$Freq),], 10))
+    }else{
+      data_selected_year_title <- subset(billboard_lyrics.df,           billboard_lyrics.df$Year == as.numeric(input$selected_lyrics_year_title_song))
+     corp2 <- Corpus(VectorSource(data_selected_year_title$Song))
+      corp2 <- tm_map(corp2, stripWhitespace) 
+      corp2 <- tm_map(corp2, removePunctuation) 
+      corp2 <- tm_map(corp2, removeWords, stopwords("english"))
+      corp2 <- tm_map(corp2, stemDocument) #Fly, flying, Flew into a single 
+      tdm2 <- TermDocumentMatrix(corp2) #rectangular thing
+      myTdm2 <- as.matrix(tdm2)
+      FreqMat2 <- data.frame(ST = rownames(myTdm2), 
+                            Freq = rowSums(myTdm2), 
+                            row.names = NULL)
+      top10Words_qn3 <- data.frame(head(FreqMat2[order(-FreqMat2$Freq),], 10))
+      
+    }
+    return(top10Words_qn3)
+  })
+  
+  #Plot 2
+  reactive_bar_chart_song_title_plot2 <- reactive({
+    selected_lyrics_year_title_song_plot2 <- as.character(input$selected_lyrics_year_title_song_plot2)
+    data_selected_year_title_plot2 <- c()
+    if(selected_lyrics_year_title_song_plot2 == "All Years"){
+      corp2_plot2 <- Corpus(VectorSource(billboard_lyrics.df$Song))
+      corp2_plot2 <- tm_map(corp2_plot2, stripWhitespace) 
+      corp2_plot2 <- tm_map(corp2_plot2, removePunctuation) 
+      corp2_plot2 <- tm_map(corp2_plot2, removeWords, stopwords("english"))
+      corp2_plot2 <- tm_map(corp2_plot2, stemDocument) #Fly, flying, Flew into a single 
+      tdm2_plot2 <- TermDocumentMatrix(corp2_plot2) #rectangular thing
+      myTdm2_plot2 <- as.matrix(tdm2_plot2)
+      FreqMat2_plot2 <- data.frame(ST = rownames(myTdm2_plot2), 
+                            Freq = rowSums(myTdm2_plot2), 
+                            row.names = NULL)
+      top10Words_qn3_plot2 <- data.frame(head(FreqMat2_plot2[order(-FreqMat2_plot2$Freq),], 10))
+    }else{
+      data_selected_year_title_plot2 <- subset(billboard_lyrics.df,           billboard_lyrics.df$Year == as.numeric(input$selected_lyrics_year_title_song_plot2))
+     corp2_plot2 <- Corpus(VectorSource(data_selected_year_title_plot2$Song))
+      corp2_plot2 <- tm_map(corp2_plot2, stripWhitespace) 
+      corp2_plot2 <- tm_map(corp2_plot2, removePunctuation) 
+      corp2_plot2 <- tm_map(corp2_plot2, removeWords, stopwords("english"))
+      corp2_plot2 <- tm_map(corp2_plot2, stemDocument) #Fly, flying, Flew into a single 
+      tdm2_plot2 <- TermDocumentMatrix(corp2_plot2) #rectangular thing
+      myTdm2_plot2 <- as.matrix(tdm2_plot2)
+      FreqMat2_plot2 <- data.frame(ST = rownames(myTdm2_plot2), 
+                            Freq = rowSums(myTdm2_plot2), 
+                            row.names = NULL)
+      top10Words_qn3_plot2 <- data.frame(head(FreqMat2_plot2[order(-FreqMat2_plot2$Freq),], 10))
+      
+    }
+    return(top10Words_qn3_plot2)
+  })
+  
+
+      
+    output$song_title_bar_chart_freq <- renderPlot({
+             ggplot(reactive_bar_chart_song_title(),
+    aes(x=ST,y=Freq)) + 
+      geom_bar(stat = "identity",fill ="Red",ylim = c(0,500))+
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+         xlab("Song title words") + ylab("Count of words")
+             
+  })
+    
+      
+      output$song_title_bar_chart_freq_plot2 <- renderPlot({
+                     ggplot(reactive_bar_chart_song_title_plot2(),
+    aes(x=ST,y=Freq)) + 
+      geom_bar(stat = "identity",fill ="Red",ylim = c(0,500))+
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+          xlab("Song title words") + ylab("Count of words")
+  })
+    
+    #Question 4a
+    reactive_bar_chart_song_lyrics_word_cloud <- reactive({
+
+      corp3 <- Corpus(VectorSource(billboard_lyrics.df$Lyrics))
+      corp3 <- tm_map(corp3, stripWhitespace) 
+      corp3 <- tm_map(corp3, removePunctuation) 
+      corp3 <- tm_map(corp3, removeWords, stopwords("english"))
+      corp3 <- tm_map(corp3, stemDocument) #Fly, flying, Flew into a single 
+      tdm3 <- TermDocumentMatrix(corp3) #rectangular thing
+      myTdm3 <- as.matrix(tdm3)
+    return(myTdm3)
+  })
+    
+  output$lyrics_bar_chart_freq_word_cloud <- renderPlot({
+    v2 <- sort(rowSums(reactive_bar_chart_song_lyrics_word_cloud()), decreasing = TRUE)
+    d2 <- data.frame(word = names(v2), freq = v2) 
+    wordcloud(d2$word,d2$freq,random.order = FALSE,rot.per = 0.3,scale = c(4,.5),
+              max.words = 100)
+  })    
+    
+
+  
+}
+```  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+shinyApp(ui = ui, server = server)
+```
